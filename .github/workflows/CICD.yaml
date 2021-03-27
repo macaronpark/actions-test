@@ -65,14 +65,12 @@ jobs:
             - name: Install dependencies
               # OS 의 shell 을 사용하여 명시된 명령어를 실행.
               # `|` multi-line command.
-              run: |
-                  yarn install
+              run: yarn install
 
             - name: Run build
-              run:  |
-                  yarn build
-            
-						- name: Create bucket
+              run: yarn build
+
+            - name: Create bucket
               uses: ItsKarma/aws-cli@v1.70.0
               with:
                   args: s3 mb s3://sz-github-actions-test
