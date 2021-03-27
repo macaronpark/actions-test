@@ -69,7 +69,8 @@ jobs:
                   yarn install
 
             - name: Run build
-              run: yarn build
+              run:  |
+                  yarn build
             
 						- name: Create bucket
               uses: ItsKarma/aws-cli@v1.70.0
