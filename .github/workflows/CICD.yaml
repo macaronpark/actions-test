@@ -9,12 +9,14 @@ on:
     push:
         # push/pull_request 이벤트 사용 시 특정 브랜치 또는 태그에서만 동작 하도록 설정 가능.
         branches:
-            - master
+            - main
             - develop
             - "feature-*"
             - "feature/**"
             - "feat/**"
             - "feat-*"
+        paths-ignore:
+            - "README.md"
 
 jobs:
     # 작업 (job) 은 기본적으로 병렬로 실행 됨.
