@@ -1,0 +1,108 @@
+# name of workflow.
+# repo 의 actions page 에 노출되는 이름. (작성 생략 시 파일 상대 경로가 이름으로 노출 됨)
+name: CICD
+
+# Required.
+# workflow 를 트리거하는 GitHub event 를 명시.
+# https://docs.github.com/en/actions/reference/events-that-trigger-workflows
+on:
+    push:
+        # push/pull_request 이벤트 사용 시 특정 브랜치 또는 태그에서만 동작 하도록 설정 가능.
+        branches:
+            - master
+            - develop
+            - "feature-*"
+            - "feature/**"
+            - "feat/**"
+            - "feat-*"
+
+jobs:
+    # 작업 (job) 은 기본적으로 병렬로 실행 됨.
+    # jobs.<job_id>.needs 로 다른 작업에 대한 종속성을 정의하여 작업을 순차적으로 진행할 수 있음.
+    # 각 작업은 고유한 문자열 id 가 필요함.
+    integration:
+        # 특정 조건을 충족시킬 때만 작업이 실행 됨.
+        # https://docs.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions
+        if: github.event_name == 'push'
+        # GitHub 에 표출될 작업의 이름.
+        name: integration
+        # Required.
+        # 각 작업은 runs-on 으로 지정된 runner 환경에서 실행 됨.
+        # (GitHub-hosted runner or a self-hosted runner)
+        runs-on: ubuntu-latest
+
+        # 각 작업 (job) 은 steps 라고 불리우는 일련의 tasks 로 구성된다.
+        steps:
+            - uses: actions/checkout@v2
+            # TODO:
+            # add proper test commands
+            #- name: Run test
+            #run: |
+            #yarn test
+
+    deploy:
+        if: github.event_name == 'push'
+        name: deploy
+        runs-on: ubuntu-latest
+        # jobs.<job_id>.needs 로 다른 작업에 대한 종속성을 정의하여 작업을 순차적으로 진행할 수 있음.
+        needs: integration
+
+        steps:
+            - uses: actions/checkout@v2
+
+              # GitHub 에 표시될 step 이름.
+            - name: Configure AWS credentials
+              # 해당 step 에서 실행될 action 선택. (action 은 재사용 가능한 코드 단위)
+              # (public actions)[https://github.com/marketplace?type=actions]
+              uses: aws-actions/configure-aws-credentials@v1
+              # action 이 정의하는 key-value pair 의 input parameters
+              # environment variables 로 설정.
+              with:
+                  aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                  aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                  aws-region: ${{ secrets.S3_BUCKET_REGION }}
+
+            - name: Install dependencies
+              # OS 의 shell 을 사용하여 명시된 명령어를 실행.
+              # `|` multi-line command.
+              run: |
+                  yarn install
+
+            - name: Run build
+              run: yarn build
+            
+						- name: Create bucket
+              uses: ItsKarma/aws-cli@v1.70.0
+              with:
+                  args: s3 mb s3://sz-github-actions-test
+              continue-on-error: true
+
+            - name: Allow public read
+              uses: ItsKarma/aws-cli@v1.70.0
+              with:
+                  args: s3api put-bucket-acl --acl public-read --bucket sz-github-actions-test
+              continue-on-error: true
+
+            - name: Allow public read to all object
+              uses: ItsKarma/aws-cli@v1.70.0
+              with:
+                  args: s3api put-bucket-policy --bucket sz-github-actions-test --policy {\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"AllowPublicReadAccess\",\"Effect\":\"Allow\",\"Principal\":\"*\",\"Action\":\"s3:GetObject\",\"Resource\":\"arn:aws:s3:::sz-github-actions-test/*\"}]}
+              continue-on-error: true
+
+            - name: Static web hosting
+              uses: ItsKarma/aws-cli@v1.70.0
+              with:
+                  args: s3 website s3://sz-github-actions-test --index-document index.html --error-document index.html
+              continue-on-error: true
+
+            - name: Deploy
+              uses: reggionick/s3-deploy@v3
+              with:
+                  folder: build
+                  bucket: sz-github-actions-test
+                  bucket-region: ${{ secrets.S3_BUCKET_REGION }}
+                  dist-id: /
+                  invalidation: /
+                  delete-removed: true
+                  no-cache: true
+                  private: true
